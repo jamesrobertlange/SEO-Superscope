@@ -3,10 +3,6 @@ import pandas as pd
 import os
 from pathlib import Path
 from collections import Counter
-from nltk.util import ngrams
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
-import nltk
 import re
 from datetime import datetime
 import base64
@@ -18,46 +14,44 @@ st.set_page_config(
     page_icon="📊",
     layout="wide"
 )
-# Download required NLTK data at startup
-@st.cache_resource
-def download_nltk_data():
-    try:
-        nltk.data.find('tokenizers/punkt')
-    except LookupError:
-        nltk.download('punkt')
-    
-    try:
-        nltk.data.find('corpora/stopwords')
-    except LookupError:
-        nltk.download('stopwords')
-
-# Download NLTK data before the app starts
-download_nltk_data()
 
 # Initialize session state
 if 'analysis_complete' not in st.session_state:
-    st.session_state.analysis_complete = False
-if 'results' not in st.session_state:
-    st.session_state.results = {}
+    st.session_state['analysis_complete'] = False
 
+if 'results' not in st.session_state:
+    st.session_state['results'] = {}
 
 def preprocess_text(text):
-    """Clean and tokenize text for n-gram analysis."""
+    """Clean and tokenize text using regex instead of NLTK."""
     if pd.isna(text) or not isinstance(text, str):
         return []
-
+    
+    # Convert to lowercase and remove special characters
     text = re.sub(r'[^a-zA-Z\s]', '', text.lower())
-    tokens = word_tokenize(text)
-    stop_words = set(stopwords.words('english'))
-    tokens = [t for t in tokens if t not in stop_words]
+    
+    # Simple tokenization by splitting on whitespace
+    tokens = text.split()
+    
+    # Basic English stop words list
+    stop_words = {
+        'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 
+        'has', 'he', 'in', 'is', 'it', 'its', 'of', 'on', 'that', 'the', 
+        'to', 'was', 'were', 'will', 'with', 'the', 'this', 'but', 'they',
+        'have', 'had', 'what', 'when', 'where', 'who', 'which', 'why', 'how',
+        'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some',
+        'such', 'than', 'too', 'very', 'can', 'will', 'just'
+    }
+    
+    # Remove stop words
+    tokens = [t for t in tokens if t not in stop_words and len(t) > 1]
     return tokens
-
 
 def extract_ngrams(tokens, n):
     """Extract n-grams from tokenized text."""
-    n_grams = list(ngrams(tokens, n))
-    return [' '.join(gram) for gram in n_grams]
-
+    if len(tokens) < n:
+        return []
+    return [' '.join(tokens[i:i+n]) for i in range(len(tokens)-n+1)]
 
 def create_duplicate_rollup(df, content_type):
     """Create a comprehensive rollup of all duplicates across page types."""
@@ -110,7 +104,6 @@ def create_duplicate_rollup(df, content_type):
 
     return rollup, detailed_df
 
-
 def analyze_content(df, content_type, include_ngrams=True, ngram_sizes=[2, 3, 4]):
     """Analyze content (titles or meta descriptions) across page types."""
     rollup_df, detailed_df = create_duplicate_rollup(df, content_type)
@@ -146,16 +139,7 @@ def analyze_content(df, content_type, include_ngrams=True, ngram_sizes=[2, 3, 4]
     # N-gram analysis
     ngram_analyses = {}
 
-    # Only perform n-gram analysis if requested
     if include_ngrams and len(ngram_sizes) > 0:
-        try:
-            nltk.data.find('tokenizers/punkt')
-            nltk.data.find('corpora/stopwords')
-        except LookupError:
-            with st.spinner('Downloading required NLTK data...'):
-                nltk.download('punkt')
-                nltk.download('stopwords')
-
         for n in ngram_sizes:
             ngram_counts_by_pagetype = {}
 
@@ -178,22 +162,23 @@ def analyze_content(df, content_type, include_ngrams=True, ngram_sizes=[2, 3, 4]
                 if frequent_ngrams:
                     ngram_counts_by_pagetype[pagetype] = frequent_ngrams
 
-            rows = []
-            for pagetype, ngram_counts in ngram_counts_by_pagetype.items():
-                for ngram, count in ngram_counts.items():
-                    rows.append({
-                        'pagetype': pagetype,
-                        'ngram': ngram,
-                        'frequency': count
-                    })
+            if ngram_counts_by_pagetype:
+                rows = []
+                for pagetype, ngram_counts in ngram_counts_by_pagetype.items():
+                    for ngram, count in ngram_counts.items():
+                        rows.append({
+                            'pagetype': pagetype,
+                            'ngram': ngram,
+                            'frequency': count
+                        })
 
-            if rows:
-                ngram_df = pd.DataFrame(rows)
-                ngram_df = ngram_df.sort_values(
-                    ['pagetype', 'frequency'],
-                    ascending=[True, False]
-                )
-                ngram_analyses[n] = ngram_df
+                if rows:
+                    ngram_df = pd.DataFrame(rows)
+                    ngram_df = ngram_df.sort_values(
+                        ['pagetype', 'frequency'],
+                        ascending=[True, False]
+                    )
+                    ngram_analyses[n] = ngram_df
 
     return (
         duplicates,
@@ -203,7 +188,6 @@ def analyze_content(df, content_type, include_ngrams=True, ngram_sizes=[2, 3, 4]
         rollup_df,
         detailed_df
     )
-
 
 def get_csv_download_link(df, filename):
     """Generate a download link for a dataframe."""
