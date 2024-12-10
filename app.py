@@ -323,9 +323,8 @@ def main():
                             'meta': meta_results
                         }
                         st.session_state.analysis_complete = True
-
+                        
                         st.success("Analysis complete!")
-                        st.experimental_rerun()
 
                 # Display results if analysis is complete
                 if st.session_state.analysis_complete:
