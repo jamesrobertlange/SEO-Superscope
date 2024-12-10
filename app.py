@@ -18,6 +18,21 @@ st.set_page_config(
     page_icon="📊",
     layout="wide"
 )
+# Download required NLTK data at startup
+@st.cache_resource
+def download_nltk_data():
+    try:
+        nltk.data.find('tokenizers/punkt')
+    except LookupError:
+        nltk.download('punkt')
+    
+    try:
+        nltk.data.find('corpora/stopwords')
+    except LookupError:
+        nltk.download('stopwords')
+
+# Download NLTK data before the app starts
+download_nltk_data()
 
 # Initialize session state
 if 'analysis_complete' not in st.session_state:
