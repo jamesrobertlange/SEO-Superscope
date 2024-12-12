@@ -1,28 +1,81 @@
-# SEO Content Analysis Tool
+# SEO Content SuperScope
+(Streamlit Web Application Here: https://seo-superscope.streamlit.app/)
+
+> ### 🚀 TL;DR
+> A powerful content analysis tool that takes common SEO CSV data (Title Tags, Meta Descriptions, URLs) from common SEO tools (such as Screaming Frog, Sitebulb, Botify, ...) and identifies duplication and n-gram commonalities quickly.
+
+This tool helps you:
+- Find duplicate titles and meta descriptions across your site
+- Analyze content patterns with n-gram analysis
+- Generate comprehensive reports by page type
+- Export detailed CSV reports for all findings
+
+> **Quick Start:** Upload a CSV/TSV file with URLs, titles, and meta descriptions, map your columns, and click analyze!
+
+**Please Note:** The Page Type segment is custom; if you have internal segments add them here. If you do not, you can select 'none' under the Page Type column selector.
+
+---
 
 ## Overview
-A Streamlit-based web application for analyzing SEO content across different page types. This tool helps identify patterns, duplicates, and n-gram frequencies in titles and meta descriptions, making it easier to maintain content consistency and identify optimization opportunities.
+A powerful Streamlit-based web application for comprehensive SEO content analysis. This tool helps content teams and SEO professionals identify patterns, duplicates, and optimization opportunities in titles and meta descriptions across different page types, with an emphasis on content consistency and quality control.
 
-## Features
-- Interactive web interface built with Streamlit
-- Support for CSV and TSV file formats
-- Comprehensive duplicate content analysis
-- N-gram analysis (bigrams, trigrams, 4-grams)
-- Page type breakdown and statistics
-- Downloadable analysis reports
+## Important Notes
+
+### Streamlit Web Limitations
+- This is a web-based tool built with Streamlit, which means:
+  - Data is processed in-memory and is not stored or retained between sessions
+  - Large files (>1GB) may experience performance issues due to browser memory constraints
+  - The interface automatically refreshes when making selections, which may cause brief loading states
+  - Only one analysis can be run at a time
+  - Session data is lost upon browser refresh
+  - File upload size may be limited by your browser settings
+
+## Roadmap
+
+### Planned Features
+- Automatic page type detection based on URL patterns and content analysis
+- Advanced URL parsing and site section identification
+- Indexability analysis and technical SEO metrics
+- Custom export templates and reporting
+- Advanced pattern matching and content classification
+- Integration with common SEO tools and APIs
+
+
+## Core Features
+
+### File Processing
+- Support for both CSV and TSV file formats
+- Flexible column mapping for various data structures
+- Intelligent column name detection for common SEO tools (Screaming Frog, etc.)
+- Auto-detection of file delimiters
+
+### Content Analysis
+- Comprehensive duplicate content detection
+    - Title duplication analysis
+    - Meta description duplication analysis
+    - Cross-page type duplicate detection
+    - Handling of empty/null values
+- N-gram analysis (configurable)
+    - Bigrams (2-word phrases)
+    - Trigrams (3-word phrases)
+    - 4-grams (4-word phrases)
+- Page type segmentation and statistics
+- Content pattern recognition
+
+### Data Visualization & Reporting
+- Interactive data tables
 - Real-time progress tracking
-- Interactive data visualization
-- Configurable processing parameters
+- Dynamic metric displays
+- Downloadable analysis reports
+- Complete content reference tables
+- Page type breakdown statistics
 
-## Requirements
-- Python 3.8+
-- Required packages:
-  ```
-  streamlit>=1.28.0
-  pandas>=1.5.0
-  nltk>=3.8.1
-  tqdm>=4.65.0
-  ```
+### Export Capabilities
+- Comprehensive ZIP export of all analyses
+- Individual file downloads
+- Multiple export formats (CSV, TXT)
+- Detailed summary reports
+- Cross-referenced duplicate reports
 
 ## Installation
 
@@ -57,69 +110,78 @@ streamlit run app.py
 
 2. Open your web browser and navigate to the provided URL (typically http://localhost:8501)
 
-3. Upload your CSV/TSV file containing the following required columns:
-   - Full URL
-   - pagetype
-   - Title
-   - Meta Description
+3. Upload your data file:
+   - Supported formats: CSV, TSV
+   - Common SEO tool exports supported (Screaming Frog, etc.)
+   - Flexible column mapping available
 
-4. Configure analysis settings in the sidebar:
-   - Select the appropriate file delimiter
-   - Adjust chunk size if needed
+4. Configure analysis settings:
+   - Select content types to analyze (Titles, Meta Descriptions)
+   - Enable/disable N-gram analysis
+   - Choose N-gram sizes
+   - Adjust file processing settings
 
-5. Click "Run Analysis" to start processing
+5. Run the analysis and explore results
 
-## Input File Requirements
+## Data Requirements
 
-Your input file should be a CSV or TSV with the following columns:
-- `Full URL`: The complete URL of the page
-- `pagetype`: The category or type of the page
-- `Title`: The page's title tag content
-- `Meta Description`: The page's meta description content
+### Required Data Fields
+The tool supports flexible column mapping for the following required fields:
+- URL (Accepts variations: Full URL, Address, Link, etc.)
+- Title (Accepts variations: Page Title, Title Tag, SEO Title, etc.)
+- Meta Description (Accepts variations: Description, Meta Desc, etc.)
+- Page Type (Optional - Accepts variations: Template, Category, Content Type, etc.)
 
-Example format:
-```csv
-Full URL,pagetype,Title,Meta Description
-https://example.com/page1,blog,"First Blog Post","This is a description of the first blog post"
-https://example.com/page2,product,"Product Name","Product description here"
+### Accepted File Formats
+```
+- CSV (comma-separated)
+- TSV (tab-separated)
+- Custom delimiters (|, ;)
 ```
 
 ## Analysis Features
 
 ### Title Analysis
-- Identifies duplicate titles across all pages
-- Groups duplicates by page type
-- Calculates duplication rates
-- Provides detailed duplicate instances
+- Complete duplicate title detection
+- Cross-page type duplicate identification
+- Empty/null value handling
+- Title pattern analysis
+- Page type segmentation
+- Reference tables for all titles
 
 ### Meta Description Analysis
-- Finds duplicate meta descriptions
-- Groups by page type
-- Shows duplication patterns
-- Lists affected URLs
+- Duplicate meta description detection
+- Cross-page type analysis
+- Empty/null value handling
+- Pattern recognition
+- Page type breakdown
+- Complete meta description reference
 
 ### N-gram Analysis
-- Analyzes frequent word patterns
-- Supports 2-gram, 3-gram, and 4-gram analysis
-- Breaks down patterns by page type
-- Shows frequency counts
+- Configurable n-gram sizes
+- Frequency analysis
+- Pattern identification
+- Cross-page type comparison
+- Word combination analysis
 
-### Export Options
-- CSV exports for all analyses
-- Comprehensive summary report
-- Detailed breakdown by page type
-- N-gram frequency reports
+### Page Type Analysis
+- Content segmentation by page type
+- Duplicate rates per page type
+- Cross-page type patterns
+- Page type content summaries
 
 ## Output Files
 
-The tool generates several downloadable files:
-1. Duplicate Analysis:
+### Comprehensive Analysis Package (ZIP)
+All analysis results are available as a single ZIP download containing:
+
+1. Duplicate Analysis Files:
    - `title_duplicate_rollup.csv`
    - `meta_description_duplicate_rollup.csv`
    - `title_pagetype_summary.csv`
    - `meta_description_pagetype_summary.csv`
 
-2. N-gram Analysis:
+2. N-gram Analysis Files:
    - `title_2gram_analysis.csv`
    - `title_3gram_analysis.csv`
    - `title_4gram_analysis.csv`
@@ -127,37 +189,70 @@ The tool generates several downloadable files:
    - `meta_description_3gram_analysis.csv`
    - `meta_description_4gram_analysis.csv`
 
-3. Summary:
+3. Reference Files:
+   - `title_reference.csv`
+   - `meta_description_reference.csv`
+
+4. Summary Reports:
    - `analysis_summary.txt`
 
-## Performance Tips
+### Individual Downloads
+Each analysis component is also available as a separate download.
 
-- For large files (>1GB), increase the chunk size in the sidebar
-- Close other memory-intensive applications when processing large datasets
-- Use a machine with at least 8GB RAM for optimal performance
+## Performance Optimization
+
+### Resource Management
+- Efficient memory handling for large datasets
+- Progressive file processing
+- Optimized duplicate detection algorithms
+- Streamlined n-gram analysis
+
+### Best Practices
+- Close memory-intensive applications before processing
+- Use recommended system specifications:
+  - 8GB+ RAM
+  - Modern multi-core processor
+  - SSD storage for large files
 
 ## Error Handling
 
-The tool includes comprehensive error handling for:
-- Missing or invalid columns
-- File format issues
-- Memory limitations
-- Processing errors
+### Comprehensive Error Detection
+- File format validation
+- Column mapping verification
+- Data type checking
+- Memory monitoring
+- Processing error capture
 
-If you encounter errors:
-1. Check your input file format
-2. Verify required columns are present
-3. Adjust chunk size if needed
-4. Ensure sufficient system resources
+### Error Recovery
+- Detailed error messages
+- Debugging information
+- Recovery suggestions
+- Performance recommendations
+
+## Interface Features
+
+### Dynamic UI
+- Responsive layout
+- Progress indicators
+- Interactive data tables
+- Expandable sections
+- Configurable analysis options
+
+### Navigation
+- Tab-based results viewing
+- Collapsible sidebars
+- Quick-access controls
+- Reset functionality
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit issues and pull requests.
+We welcome contributions! Please follow these steps:
 
 1. Fork the repository
-2. Create your feature branch
-3. Make your changes
-4. Submit a pull request
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
 ## License
 
@@ -165,10 +260,16 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Support
 
-For bugs, questions, and discussions, please use the GitHub Issues page.
+For technical support:
+- Submit issues via GitHub Issues
+- Review existing issues for solutions
+- Check documentation for guidance
 
 ## Acknowledgments
 
-- Built with Streamlit
-- Uses NLTK for natural language processing
-- Powered by pandas for data analysis
+Built with:
+- Streamlit for web interface
+- Pandas for data processing
+- Python standard library
+
+Special thanks to all contributors and users who provide valuable feedback and suggestions.

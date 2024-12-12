@@ -13,7 +13,7 @@ import zipfile
 
 # Page config
 st.set_page_config(
-    page_title="SEO Content Analysis Tool",
+    page_title="SEO Content SuperScope",
     page_icon="📊",
     layout="wide"
 )
@@ -789,6 +789,108 @@ def display_empty_state(content_type):
         </div>
     """, unsafe_allow_html=True)
 
+def load_file_with_special_header(uploaded_file, delimiter):
+    """
+    Load a CSV file that might start with 'sep=' line, with explicit header handling.
+    """
+    try:
+        # Read raw content
+        content = uploaded_file.getvalue().decode('utf-8')
+        
+        # Split into lines and remove empty lines
+        lines = [line.strip() for line in content.splitlines() if line.strip()]
+        
+        if not lines:
+            st.error("File appears to be empty")
+            return None
+            
+        # Define expected headers based on the file preview
+        expected_headers = ['Full URL', 'pagetype', 'Title', 'Meta Description']
+        
+        # Find where the real data starts
+        start_idx = None
+        for i, line in enumerate(lines):
+            if any(header in line for header in expected_headers):
+                start_idx = i
+                break
+                
+        if start_idx is None:
+            # If we can't find expected headers, try to use the line after 'sep='
+            if lines[0].startswith('sep='):
+                start_idx = 1
+            else:
+                start_idx = 0
+        
+        # Get the actual header line and remaining data
+        header_line = lines[start_idx]
+        data_lines = lines[start_idx + 1:]
+        
+        # Create clean CSV content
+        clean_csv = header_line + '\n' + '\n'.join(data_lines)
+        
+        # Read CSV with pandas
+        df = pd.read_csv(
+            io.StringIO(clean_csv),
+            encoding='utf-8',
+            on_bad_lines='skip'  # Skip problematic lines
+        )
+        
+        # Clean up column names
+        df.columns = [col.strip() for col in df.columns]
+        
+        # Add debug information
+        if st.session_state.get('debug_mode', False):
+            st.write("Debug Info:")
+            st.write(f"Found headers: {list(df.columns)}")
+            st.write(f"Number of rows: {len(df)}")
+            with st.expander("Preview clean data"):
+                st.write(df.head())
+        
+        return df
+        
+    except Exception as e:
+        st.error(f"Error reading file: {str(e)}")
+        st.write("Debug information:")
+        st.write("File content preview (first few lines):")
+        try:
+            preview = '\n'.join(lines[:5]) if 'lines' in locals() else 'No preview available'
+            st.code(preview)
+        except:
+            st.write("Could not generate preview")
+        st.write("Full error traceback:")
+        st.code(traceback.format_exc())
+        return None
+
+def inspect_csv_content(uploaded_file):
+    """
+    Inspect the content of a CSV file to help debug issues.
+    """
+    try:
+        content = uploaded_file.getvalue().decode('utf-8')
+        lines = content.splitlines()
+        
+        st.write("CSV File Inspection:")
+        st.write("---")
+        
+        st.write("First 5 lines of raw content:")
+        for i, line in enumerate(lines[:5]):
+            st.code(f"Line {i + 1}: {line}")
+            
+        # Try to detect delimiter
+        first_line = lines[0] if lines else ''
+        delimiters = [',', '\t', ';', '|']
+        detected_delims = [d for d in delimiters if d in first_line]
+        
+        st.write("\nDelimiter Analysis:")
+        for d in detected_delims:
+            count = first_line.count(d)
+            st.write(f"Found {count} instances of '{d}'")
+            
+        return True
+    except Exception as e:
+        st.error(f"Error inspecting CSV: {str(e)}")
+        return False
+
 def main():
     # Create a container for the header area
     header_container = st.container()
@@ -803,10 +905,12 @@ def main():
                 st.rerun()
         
         with col2:
-            st.title("SEO Content Analysis Tool")
+            st.title("SEO Content SuperScope")
             st.write("""
             This tool analyzes SEO content (titles and meta descriptions) across different page types,
-            identifying patterns, duplicates, and n-gram frequencies.
+            identifying patterns, duplicates, and n-gram frequencies from common CSV data sources (such as Screaming Frog and Sitebulb).
+                     
+            Created by [Jimmy Lange](https://jamesrobertlange.com).
             """)
 
     # File upload
@@ -818,6 +922,13 @@ def main():
 
     if uploaded_file:
         try:
+            # Add debug option in sidebar
+            debug_mode = st.sidebar.checkbox("Debug Mode", value=False)
+            
+            if debug_mode:
+                with st.expander("CSV File Inspection Results"):
+                    inspect_csv_content(uploaded_file)
+            
             # File configuration in sidebar
             st.sidebar.header("File Settings")
             delimiter = st.sidebar.selectbox(
@@ -827,182 +938,192 @@ def main():
                 format_func=lambda x: 'Tab' if x == '\t' else x
             )
 
-            # Read the file
-            df = pd.read_csv(uploaded_file, sep=delimiter)
-            if not st.session_state.mapping_complete:
-                mapped_df = display_column_mapper(df)
-                if mapped_df is not None:
-                    st.session_state.mapped_df = mapped_df
-                    st.session_state.mapping_complete = True
-                    st.success("Column mapping confirmed! You can now proceed with the analysis.")
-                    st.session_state.analysis_complete = False
-                    st.session_state.results = {}
+            # Reset file pointer before reading
+            uploaded_file.seek(0)
             
-            # Only proceed with analysis if mapping is complete
-            if st.session_state.mapping_complete and st.session_state.mapped_df is not None:
-                df = st.session_state.mapped_df  # Use the mapped DataFrame
+            # Read the file
+            df = load_file_with_special_header(uploaded_file, delimiter)
+            
+            if df is not None:
+                if debug_mode:
+                    st.write("Loaded DataFrame Info:")
+                    st.write(f"Shape: {df.shape}")
+                    st.write("Columns:", list(df.columns))
+                    with st.expander("Preview Data"):
+                        st.dataframe(df.head())
 
-                # Display basic file info
-                st.subheader("File Overview")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Total URLs", f"{len(df):,}")
-                with col2:
-                    st.metric("Unique URLs", f"{df['url'].nunique():,}")
-                with col3:
-                    st.metric("Page Types", f"{df['pagetype'].nunique():,}")
+                if not st.session_state.mapping_complete:
+                    mapped_df = display_column_mapper(df)
+                    if mapped_df is not None:
+                        st.session_state.mapped_df = mapped_df
+                        st.session_state.mapping_complete = True
+                        st.success("Column mapping confirmed! You can now proceed with the analysis.")
+                        st.session_state.analysis_complete = False
+                        st.session_state.results = {}
+                
+                # Only proceed with analysis if mapping is complete
+                if st.session_state.mapping_complete and st.session_state.mapped_df is not None:
+                    df = st.session_state.mapped_df  # Use the mapped DataFrame
 
-                # Analysis configuration
-                st.sidebar.subheader("Analysis Options")
-                analysis_type = st.sidebar.multiselect(
-                    "Select content to analyze",
-                    options=["Titles", "Meta Descriptions"],
-                    default=["Titles", "Meta Descriptions"],
-                    help="Choose which content types to analyze"
-                )
+                    # Display basic file info
+                    st.subheader("File Overview")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Total URLs", f"{len(df):,}")
+                    with col2:
+                        st.metric("Unique URLs", f"{df['url'].nunique():,}")
+                    with col3:
+                        st.metric("Page Types", f"{df['pagetype'].nunique():,}")
 
-                include_ngrams = st.sidebar.checkbox(
-                    "Include N-gram Analysis",
-                    value=True,
-                    help="Enable to analyze word patterns (may increase processing time)"
-                )
-
-                ngram_sizes = []
-                if include_ngrams:
-                    ngram_sizes = st.sidebar.multiselect(
-                        "Select N-gram sizes",
-                        options=["Bigrams (2)", "Trigrams (3)", "4-grams (4)"],
-                        default=["Bigrams (2)", "Trigrams (3)", "4-grams (4)"],
-                        help="Choose which n-gram sizes to analyze"
+                    # Analysis configuration
+                    st.sidebar.subheader("Analysis Options")
+                    analysis_type = st.sidebar.multiselect(
+                        "Select content to analyze",
+                        options=["Titles", "Meta Descriptions"],
+                        default=["Titles", "Meta Descriptions"],
+                        help="Choose which content types to analyze"
                     )
 
-                # In the main app where we define button styles:
-                st.markdown("""
-                    <style>
-                    /* Default button reset - remove any global styling */
-                    div.stButton > button:first-child {
-                        height: 3em;
-                        width: 100%;
-                        font-size: 20px;
-                        font-weight: bold;
-                        border: none;
-                        border-radius: 4px;
-                        margin: 1em 0;
-                    }
-                    
-                    /* Specific styling for the confirmation/mapping button (red) */
-                    div.stButton.confirmation-button > button:first-child {
-                        background-color: #FF4B4B;
-                        color: white;
-                    }
-                    div.stButton.confirmation-button > button:hover {
-                        background-color: #FF6B6B;
-                    }
-                    
-                    /* Specific styling for analysis button (blue) */
-                    div.stButton.analysis-button > button:first-child {
-                        background-color: #0096FF;
-                        color: white;
-                    }
-                    div.stButton.analysis-button > button:hover {
-                        background-color: #0078CC;
-                    }
-                    </style>
-                """, unsafe_allow_html=True)
+                    include_ngrams = st.sidebar.checkbox(
+                        "Include N-gram Analysis",
+                        value=True,
+                        help="Enable to analyze word patterns (may increase processing time)"
+                    )
 
-                # Create a centered container for the analyze button
-                col1, col2, col3 = st.columns([1, 2, 1])
-                with col2:
-                    st.markdown('<div class="analysis-button">', unsafe_allow_html=True)
-                    if st.button("🔍 Run Analysis"):
-                        with st.spinner("Analyzing content..."):
-                            title_results = None
-                            meta_results = None
+                    ngram_sizes = []
+                    if include_ngrams:
+                        ngram_sizes = st.sidebar.multiselect(
+                            "Select N-gram sizes",
+                            options=["Bigrams (2)", "Trigrams (3)", "4-grams (4)"],
+                            default=["Bigrams (2)", "Trigrams (3)", "4-grams (4)"],
+                            help="Choose which n-gram sizes to analyze"
+                        )
 
-                            # Extract numbers from n-gram selections
-                            selected_sizes = []
-                            if include_ngrams and ngram_sizes:
-                                for size_option in ngram_sizes:
-                                    number = re.search(r'\((\d+)\)', size_option)
-                                    if number:
-                                        selected_sizes.append(int(number.group(1)))
+                    # Define button styles
+                    st.markdown("""
+                        <style>
+                        div.stButton > button:first-child {
+                            height: 3em;
+                            width: 100%;
+                            font-size: 20px;
+                            font-weight: bold;
+                            border: none;
+                            border-radius: 4px;
+                            margin: 1em 0;
+                        }
+                        
+                        div.stButton.confirmation-button > button:first-child {
+                            background-color: #FF4B4B;
+                            color: white;
+                        }
+                        div.stButton.confirmation-button > button:hover {
+                            background-color: #FF6B6B;
+                        }
+                        
+                        div.stButton.analysis-button > button:first-child {
+                            background-color: #0096FF;
+                            color: white;
+                        }
+                        div.stButton.analysis-button > button:hover {
+                            background-color: #0078CC;
+                        }
+                        </style>
+                    """, unsafe_allow_html=True)
 
-                            # Title analysis
-                            if "Titles" in analysis_type:
-                                st.info("Analyzing titles...")
-                                title_results = analyze_content(
-                                    df,
-                                    'Title',
-                                    include_ngrams=include_ngrams,
-                                    ngram_sizes=selected_sizes
-                                )
+                    # Create a centered container for the analyze button
+                    col1, col2, col3 = st.columns([1, 2, 1])
+                    with col2:
+                        st.markdown('<div class="analysis-button">', unsafe_allow_html=True)
+                        if st.button("🔍 Run Analysis"):
+                            with st.spinner("Analyzing content..."):
+                                title_results = None
+                                meta_results = None
 
-                            # Meta description analysis
-                            if "Meta Descriptions" in analysis_type:
-                                st.info("Analyzing meta descriptions...")
-                                meta_results = analyze_content(
-                                    df,
-                                    'Meta Description',
-                                    include_ngrams=include_ngrams,
-                                    ngram_sizes=selected_sizes
-                                )
+                                # Extract numbers from n-gram selections
+                                selected_sizes = []
+                                if include_ngrams and ngram_sizes:
+                                    for size_option in ngram_sizes:
+                                        number = re.search(r'\((\d+)\)', size_option)
+                                        if number:
+                                            selected_sizes.append(int(number.group(1)))
 
-                            # Store results in session state
-                            st.session_state.results = {
-                                'title': title_results,
-                                'meta': meta_results
-                            }
-                            st.session_state.analysis_complete = True
-                            st.success("Analysis complete!")
-                    st.markdown('</div>', unsafe_allow_html=True)
+                                # Title analysis
+                                if "Titles" in analysis_type:
+                                    st.info("Analyzing titles...")
+                                    title_results = analyze_content(
+                                        df,
+                                        'Title',
+                                        include_ngrams=include_ngrams,
+                                        ngram_sizes=selected_sizes
+                                    )
 
-                # Display results if analysis is complete
-                if st.session_state.analysis_complete:
-                    title_results = st.session_state.results['title']
-                    meta_results = st.session_state.results['meta']
+                                # Meta description analysis
+                                if "Meta Descriptions" in analysis_type:
+                                    st.info("Analyzing meta descriptions...")
+                                    meta_results = analyze_content(
+                                        df,
+                                        'Meta Description',
+                                        include_ngrams=include_ngrams,
+                                        ngram_sizes=selected_sizes
+                                    )
 
-                    st.header("Analysis Results")
+                                # Store results in session state
+                                st.session_state.results = {
+                                    'title': title_results,
+                                    'meta': meta_results
+                                }
+                                st.session_state.analysis_complete = True
+                                st.success("Analysis complete!")
+                        st.markdown('</div>', unsafe_allow_html=True)
 
-                    # Create dynamic tabs based on selected analyses
-                    tab_options = []
-                    if "Titles" in analysis_type:
-                        tab_options.append("Title Analysis")
-                    if "Meta Descriptions" in analysis_type:
-                        tab_options.append("Meta Description Analysis")
-                    if include_ngrams and len(ngram_sizes) > 0:
-                        tab_options.append("N-gram Analysis")
-                    tab_options.append("Export Results")
-                    
-                    if tab_options:  # Only create tabs if there are options
-                        tabs = st.tabs(tab_options)
-                        tab_index = 0
+                    # Display results if analysis is complete
+                    if st.session_state.analysis_complete:
+                        title_results = st.session_state.results['title']
+                        meta_results = st.session_state.results['meta']
 
-                        # Title Analysis Tab
+                        st.header("Analysis Results")
+
+                        # Create dynamic tabs based on selected analyses
+                        tab_options = []
                         if "Titles" in analysis_type:
-                            with tabs[tab_index]:
-                                display_duplicate_analysis(title_results, None, ["Titles"], df)
-                            tab_index += 1
-
-                        # Meta Description Analysis Tab
+                            tab_options.append("Title Analysis")
                         if "Meta Descriptions" in analysis_type:
-                            with tabs[tab_index]:
-                                display_duplicate_analysis(None, meta_results, ["Meta Descriptions"], df)
-                            tab_index += 1
-
-                        # N-gram Analysis Tab
+                            tab_options.append("Meta Description Analysis")
                         if include_ngrams and len(ngram_sizes) > 0:
-                            with tabs[tab_index]:
-                                display_ngram_analysis(title_results, meta_results, analysis_type)
-                            tab_index += 1
+                            tab_options.append("N-gram Analysis")
+                        tab_options.append("Export Results")
+                        
+                        if tab_options:  # Only create tabs if there are options
+                            tabs = st.tabs(tab_options)
+                            tab_index = 0
 
-                        # Export Results Tab
-                        with tabs[tab_index]:
-                            display_export_options(df, title_results, meta_results, analysis_type)
+                            # Title Analysis Tab
+                            if "Titles" in analysis_type:
+                                with tabs[tab_index]:
+                                    display_duplicate_analysis(title_results, None, ["Titles"], df)
+                                tab_index += 1
+
+                            # Meta Description Analysis Tab
+                            if "Meta Descriptions" in analysis_type:
+                                with tabs[tab_index]:
+                                    display_duplicate_analysis(None, meta_results, ["Meta Descriptions"], df)
+                                tab_index += 1
+
+                            # N-gram Analysis Tab
+                            if include_ngrams and len(ngram_sizes) > 0:
+                                with tabs[tab_index]:
+                                    display_ngram_analysis(title_results, meta_results, analysis_type)
+                                tab_index += 1
+
+                            # Export Results Tab
+                            with tabs[tab_index]:
+                                display_export_options(df, title_results, meta_results, analysis_type)
 
         except Exception as e:
             st.error(f"Error processing file: {str(e)}")
-            with st.expander("Show Debug Information"):
-                st.code(traceback.format_exc())
+            if debug_mode:
+                with st.expander("Show Debug Information"):
+                    st.code(traceback.format_exc())
     
     else:
         st.info("Please upload a CSV or TSV file to begin.")
