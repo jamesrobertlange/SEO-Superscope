@@ -400,7 +400,7 @@ def display_column_mapper(df):
     st.markdown('</div>', unsafe_allow_html=True)
 
 def generate_summary_report(df, title_results, meta_results):
-    """Generate a comprehensive summary report of the analysis."""
+    """Generate a comprehensive summary report of the analysis with both counting methods."""
     # Normalize column names to lowercase
     df.columns = df.columns.str.lower()
     
@@ -424,61 +424,96 @@ Total page types: {df['pagetype'].nunique():,}
 
     # Title analysis
     if title_results and 'title' in df.columns:
+        # Get total URLs involved in title duplication
+        urls_with_duplicate_titles = len(df[df.duplicated(subset=['title'], keep=False)])
+        # Get number of additional/repeated instances
+        extra_title_instances = len(df[df.duplicated(subset=['title'], keep='first')])
+        
         summary_text += f"""
 Title Analysis
 -------------
 Total titles: {len(df):,}
 Unique titles: {df['title'].nunique():,}
-Duplicate titles: {len(df[df.duplicated(subset=['title'], keep=False)]):,}
+
+Duplicate Title Metrics:
+• Total URLs with duplicate titles: {urls_with_duplicate_titles:,} ({(urls_with_duplicate_titles/len(df)*100):.1f}% of all URLs)
+• Additional instances only: {extra_title_instances:,} ({(extra_title_instances/len(df)*100):.1f}% of all URLs)
 """
         if title_results[4] is not None and not title_results[4].empty:
             title_col = 'title' if 'title' in title_results[4].columns else 'Title'
             summary_text += (
-                f"Number of unique duplicate titles: {len(title_results[4]):,}\n"
-                f"Most repeated title occurrences: {title_results[4].iloc[0]['Duplicate_Count']:,}\n"
+                f"Most duplicated title details:\n"
+                f"• Title: {title_results[4].iloc[0][title_col]}\n"
+                f"• Times used: {title_results[4].iloc[0]['Duplicate_Count']:,}\n"
+                f"• Page Types: {title_results[4].iloc[0]['Pagetype_List']}\n"
             )
 
     # Meta description analysis
     if meta_results and 'meta_description' in df.columns:
+        # Get total URLs involved in meta description duplication
+        urls_with_duplicate_metas = len(df[df.duplicated(subset=['meta_description'], keep=False)])
+        # Get number of additional/repeated instances
+        extra_meta_instances = len(df[df.duplicated(subset=['meta_description'], keep='first')])
+        
         summary_text += f"""
 Meta Description Analysis
 ------------------------
 Total meta descriptions: {len(df):,}
 Unique meta descriptions: {df['meta_description'].nunique():,}
-Duplicate meta descriptions: {len(df[df.duplicated(subset=['meta_description'], keep=False)]):,}
+
+Duplicate Meta Description Metrics:
+• Total URLs with duplicate meta descriptions: {urls_with_duplicate_metas:,} ({(urls_with_duplicate_metas/len(df)*100):.1f}% of all URLs)
+• Additional instances only: {extra_meta_instances:,} ({(extra_meta_instances/len(df)*100):.1f}% of all URLs)
 """
         if meta_results[4] is not None and not meta_results[4].empty:
             meta_col = 'meta_description' if 'meta_description' in meta_results[4].columns else 'Meta Description'
             summary_text += (
-                f"Number of unique duplicate meta descriptions: {len(meta_results[4]):,}\n"
-                f"Most repeated meta description occurrences: {meta_results[4].iloc[0]['Duplicate_Count']:,}\n"
+                f"Most duplicated meta description details:\n"
+                f"• Meta Description: {meta_results[4].iloc[0][meta_col]}\n"
+                f"• Times used: {meta_results[4].iloc[0]['Duplicate_Count']:,}\n"
+                f"• Page Types: {meta_results[4].iloc[0]['Pagetype_List']}\n"
             )
 
-    summary_text += "\nAnalysis by Page Type\n--------------------\n"
+    summary_text += "\nAnalysis by Page Type\n--------------------"
+    
     for pagetype in sorted(df['pagetype'].unique()):
         pagetype_data = df[df['pagetype'] == pagetype]
-        summary_text += f"\nPage Type: {pagetype}\n"
-        summary_text += f"Total URLs: {len(pagetype_data):,}\n"
+        summary_text += f"\n\nPage Type: {pagetype}"
+        summary_text += f"\nTotal URLs: {len(pagetype_data):,}"
 
         if title_results and 'title' in df.columns:
-            title_dupes = len(pagetype_data[
+            # Get both counts for titles
+            total_title_dupes = len(pagetype_data[
                 pagetype_data.duplicated(subset=['title'], keep=False)
             ])
-            summary_text += f"Duplicate Titles: {title_dupes:,} "
-            if title_dupes > 0:
-                summary_text += f"({(title_dupes/len(pagetype_data)*100):.1f}%)\n"
-            else:
-                summary_text += "\n"
+            extra_title_dupes = len(pagetype_data[
+                pagetype_data.duplicated(subset=['title'], keep='first')
+            ])
+            
+            dupe_rate = (total_title_dupes/len(pagetype_data)*100) if total_title_dupes > 0 else 0
+            extra_rate = (extra_title_dupes/len(pagetype_data)*100) if extra_title_dupes > 0 else 0
+            
+            summary_text += f"""
+Title Duplication:
+• URLs with duplicate titles: {total_title_dupes:,} ({dupe_rate:.1f}% of page type)
+• Additional instances only: {extra_title_dupes:,} ({extra_rate:.1f}% of page type)"""
 
         if meta_results and 'meta_description' in df.columns:
-            meta_dupes = len(pagetype_data[
+            # Get both counts for meta descriptions
+            total_meta_dupes = len(pagetype_data[
                 pagetype_data.duplicated(subset=['meta_description'], keep=False)
             ])
-            summary_text += f"Duplicate Meta Descriptions: {meta_dupes:,} "
-            if meta_dupes > 0:
-                summary_text += f"({(meta_dupes/len(pagetype_data)*100):.1f}%)\n"
-            else:
-                summary_text += "\n"
+            extra_meta_dupes = len(pagetype_data[
+                pagetype_data.duplicated(subset=['meta_description'], keep='first')
+            ])
+            
+            dupe_rate = (total_meta_dupes/len(pagetype_data)*100) if total_meta_dupes > 0 else 0
+            extra_rate = (extra_meta_dupes/len(pagetype_data)*100) if extra_meta_dupes > 0 else 0
+            
+            summary_text += f"""
+Meta Description Duplication:
+• URLs with duplicate meta descriptions: {total_meta_dupes:,} ({dupe_rate:.1f}% of page type)
+• Additional instances only: {extra_meta_dupes:,} ({extra_rate:.1f}% of page type)"""
 
     return summary_text
 
