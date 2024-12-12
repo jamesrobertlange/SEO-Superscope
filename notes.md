@@ -1,7 +1,16 @@
-- add an input to create pagetypes if they don't already have input
+# to do
+add a reset feature
 
-make sure it cleans the urls and adds a unique identifier based on site section? look for code that parses the urls and adds it.
+add in "Address" under URLs, and add in more defaults for Screaming Frog and common tools
 
-create multiple alternates and allow prompt for matching at the streamlit level with headers
+update duplications for null/empty values (specifically for the dupe rollups)
 
-add a download all button
+rename tool based on features
+
+update the doubled UI
+
+change color to run analysis vs headers buttons
+
+# roadmap
+add roadmap (for auto pagetypes)
+add in updates for indexability - make sure it cleans the urls and adds a unique identifier based on site section? look for code that parses the urls and adds it.

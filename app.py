@@ -124,20 +124,26 @@ def analyze_content(df, content_type, include_ngrams=True, ngram_sizes=[2, 3, 4]
     
     content_column = column_mapping.get(content_type, content_type)
     
-    # Create duplicate rollup
-    duplicated_mask = df.duplicated(subset=[content_column], keep=False)
-    duplicates_df = df[duplicated_mask].copy()
-
+    # Replace empty strings and pure whitespace with None for consistent handling
+    df[content_column] = df[content_column].replace(r'^\s*$', None, regex=True)
+    
+    # Create duplicate rollup including nulls
+    duplicates_df = df[df.duplicated(subset=[content_column], keep=False)].copy()
+    
+    # Handle case where all values are unique
     if duplicates_df.empty:
         return None, None, None, {}, None, None
 
     # Create rollup of duplicates
-    rollup = duplicates_df.groupby(content_column).agg({
+    rollup = duplicates_df.groupby(content_column, dropna=False).agg({
         'url': list,
         'pagetype': list,
         'meta_description' if content_column == 'title' else 'title': list
     }).reset_index()
 
+    # Replace None with "[BLANK]" for display
+    rollup[content_column] = rollup[content_column].fillna("[BLANK]")
+    
     rollup['Duplicate_Count'] = rollup['url'].apply(len)
     rollup['Unique_Pagetypes'] = rollup['pagetype'].apply(lambda x: len(set(x)))
     rollup['Pagetype_List'] = rollup['pagetype'].apply(lambda x: ', '.join(sorted(set(x))))
@@ -145,7 +151,7 @@ def analyze_content(df, content_type, include_ngrams=True, ngram_sizes=[2, 3, 4]
 
     if content_column == 'title':
         rollup['Meta_Descriptions'] = rollup['meta_description'].apply(
-            lambda x: '\n'.join(sorted(set(str(desc) for desc in x)))
+            lambda x: '\n'.join(sorted(set(str(desc) if desc is not None else "[BLANK]" for desc in x)))
         )
         columns = [
             content_column, 'Duplicate_Count', 'Unique_Pagetypes', 'Pagetype_List',
@@ -153,7 +159,7 @@ def analyze_content(df, content_type, include_ngrams=True, ngram_sizes=[2, 3, 4]
         ]
     else:
         rollup['Titles'] = rollup['title'].apply(
-            lambda x: '\n'.join(sorted(set(str(title) for title in x)))
+            lambda x: '\n'.join(sorted(set(str(title) if title is not None else "[BLANK]" for title in x)))
         )
         columns = [
             content_column, 'Duplicate_Count', 'Unique_Pagetypes', 'Pagetype_List',
@@ -163,21 +169,23 @@ def analyze_content(df, content_type, include_ngrams=True, ngram_sizes=[2, 3, 4]
     rollup = rollup[columns].sort_values('Duplicate_Count', ascending=False)
 
     # Create summary of duplicates
-    duplicates = df.groupby(content_column).agg({
+    duplicates = df.groupby(content_column, dropna=False).agg({
         'url': 'count',
         'pagetype': lambda x: ', '.join(set(x))
     }).reset_index()
     duplicates.columns = [content_column, 'Duplicate_Count', 'Pagetypes']
+    duplicates[content_column] = duplicates[content_column].fillna("[BLANK]")
     duplicates = duplicates.sort_values('Duplicate_Count', ascending=False)
 
     # Create pagetype summary
-    pagetype_summary = df.groupby('pagetype').agg({
+    pagetype_summary = df.groupby('pagetype', dropna=False).agg({
         'url': 'count',
         content_column: lambda x: x.duplicated().sum()
     }).reset_index()
     pagetype_summary.columns = [
         'Pagetype', 'Total_URLs', f'Duplicate_{content_type}s'
     ]
+    pagetype_summary['Pagetype'] = pagetype_summary['Pagetype'].fillna("[BLANK]")
     pagetype_summary['Duplication_Rate'] = (
         pagetype_summary[f'Duplicate_{content_type}s'] /
         pagetype_summary['Total_URLs'] * 100
@@ -195,53 +203,43 @@ def analyze_content(df, content_type, include_ngrams=True, ngram_sizes=[2, 3, 4]
 
     # N-gram analysis
     ngram_analyses = {}
-
     if include_ngrams and len(ngram_sizes) > 0:
+        # Create a list of all tokens from all content
+        all_tokens = []
+        for text in df[content_column][df[content_column].notna()]:
+            tokens = preprocess_text(str(text))
+            all_tokens.extend(tokens)
+            
+        # Generate n-grams for each size
         for n in ngram_sizes:
-            ngram_counts_by_pagetype = {}
-
-            for pagetype in df['pagetype'].unique():
-                content = df[df['pagetype'] == pagetype][content_column]
-
-                all_ngrams = []
-                for text in content:
-                    tokens = preprocess_text(text)
-                    if tokens:
-                        text_ngrams = extract_ngrams(tokens, n)
-                        all_ngrams.extend(text_ngrams)
-
-                ngram_counts = Counter(all_ngrams)
-                frequent_ngrams = {
-                    gram: count for gram, count in ngram_counts.items()
-                    if count > 1
-                }
-
-                if frequent_ngrams:
-                    ngram_counts_by_pagetype[pagetype] = frequent_ngrams
-
-            if ngram_counts_by_pagetype:
-                rows = []
-                for pagetype, ngram_counts in ngram_counts_by_pagetype.items():
-                    for ngram, count in ngram_counts.items():
-                        rows.append({
-                            'pagetype': pagetype,
-                            'ngram': ngram,
-                            'frequency': count
-                        })
-
-                if rows:
-                    ngram_df = pd.DataFrame(rows)
-                    ngram_df = ngram_df.sort_values(
-                        ['pagetype', 'frequency'],
-                        ascending=[True, False]
-                    )
-                    ngram_analyses[n] = ngram_df
+            # Get all n-grams
+            all_ngrams = []
+            for tokens in [preprocess_text(str(text)) for text in df[content_column][df[content_column].notna()]]:
+                ngrams = extract_ngrams(tokens, n)
+                all_ngrams.extend(ngrams)
+            
+            # Count n-gram frequencies
+            ngram_counts = Counter(all_ngrams)
+            
+            # Convert to DataFrame
+            if ngram_counts:
+                ngram_df = pd.DataFrame.from_dict(ngram_counts, orient='index', columns=['Count'])
+                ngram_df.index.name = f'{n}-gram'
+                ngram_df = ngram_df.reset_index()
+                ngram_df = ngram_df.sort_values('Count', ascending=False)
+                
+                # Calculate percentage
+                total_ngrams = ngram_df['Count'].sum()
+                ngram_df['Percentage'] = (ngram_df['Count'] / total_ngrams * 100).round(2)
+                
+                # Store in analyses dictionary
+                ngram_analyses[n] = ngram_df
 
     # Create detailed duplicate analysis
     detailed_rows = []
     for _, row in duplicates_df.iterrows():
         detailed_rows.append({
-            'Content': row[content_column],
+            'Content': row[content_column] if row[content_column] is not None else "[BLANK]",
             'URL': row['url'],
             'Pagetype': row['pagetype'],
             'Other_Content': row['meta_description'] if content_column == 'title' else row['title']
@@ -271,19 +269,32 @@ def get_csv_download_link(df, filename):
 def infer_column_mapping(columns):
     """Infer column mappings based on common patterns in column names."""
     patterns = {
-        'url': ['url', 'link', 'address', 'location', 'full url', 'page url'],
-        'title': ['title', 'page title', 'title tag', 'page title tag', 'seo title'],
-        'meta_description': ['meta description', 'description', 'meta desc', 'metadescription', 'meta'],
-        'pagetype': ['page type', 'pagetype', 'type', 'template', 'category', 'page category']
+        'url': ['url', 'link', 'address', 'location', 'full url', 'page url', 'url encoded address'],
+        'title': ['title', 'page title', 'title tag', 'page title tag', 'seo title', 'title 1'],
+        'meta_description': ['meta description', 'description', 'meta desc', 'metadescription', 'meta', 'meta description 1'],
+        'pagetype': ['page type', 'pagetype', 'type', 'template', 'category', 'page category', 'content type']
     }
     
     mapping = {}
-    for col in columns:
-        col_lower = col.lower()
-        for field, pattern_list in patterns.items():
-            if any(pattern in col_lower for pattern in pattern_list):
-                mapping[field] = col
+    columns_lower = [col.lower() for col in columns]
+    
+    # Create a mapping from lowercase to original column names
+    original_case = {col.lower(): col for col in columns}
+    
+    for field, pattern_list in patterns.items():
+        # Try exact matches first
+        for pattern in pattern_list:
+            if pattern in columns_lower:
+                mapping[field] = original_case[pattern]
                 break
+        
+        # If no exact match, try partial matches
+        if field not in mapping:
+            for col in columns_lower:
+                if any(pattern in col for pattern in pattern_list):
+                    mapping[field] = original_case[col]
+                    break
+    
     return mapping
 
 def display_column_mapper(df):
@@ -304,45 +315,56 @@ def display_column_mapper(df):
         st.markdown("### Map Your Columns")
         mapping = {}
         
-        # Create mapping interface for each field
-        required_fields = {
-            'url': ('URL', True),
-            'title': ('Title', True),
-            'meta_description': ('Meta Description', True),
-            'pagetype': ('Page Type', False)  # Optional
-        }
+        # Define required fields and their properties
+        required_fields = [
+            ('url', 'URL', True),
+            ('title', 'Title', True),
+            ('meta_description', 'Meta Description', True),
+            ('pagetype', 'Page Type', False)
+        ]
         
-        for field, (display_name, required) in required_fields.items():
+        # Create mapping interface for each field
+        for field, display_name, required in required_fields:
             default_value = inferred_mapping.get(field, '')
-            options = [''] + columns if not required else columns
             help_text = f"Select the column that contains your {display_name.lower()}"
+            
             if not required:
                 help_text += " (optional)"
-                
+                # Special handling for pagetype - add 'None' option
+                options = ['None'] + columns
+                selected_index = 0  # Default to 'None'
+                if default_value and default_value in columns:
+                    selected_index = options.index(default_value)
+            else:
+                options = columns
+                selected_index = options.index(default_value) if default_value in options else 0
+            
             mapping[field] = st.selectbox(
                 f"Select column for {display_name}",
                 options=options,
-                index=options.index(default_value) if default_value in options else 0,
+                index=selected_index,
                 help=help_text
             )
     
     with col2:
         st.markdown("### Preview")
-        if all(v for k, v in mapping.items() if required_fields[k][1]):
-            preview_columns = [v for v in mapping.values() if v]
+        preview_columns = [v for k, v in mapping.items() 
+                         if v and v != 'None']  # Exclude 'None' from preview
+        if preview_columns:
             preview_df = df[preview_columns].head(3)
             st.dataframe(preview_df, use_container_width=True)
             
             st.markdown("### Mapping Summary")
-            for field, (display_name, required) in required_fields.items():
-                if mapping[field]:
+            for field, display_name, required in required_fields:
+                if mapping[field] and mapping[field] != 'None':
                     st.write(f"✓ {display_name}: `{mapping[field]}`")
-                elif not required:
-                    st.write("⚪ Page Type: Not mapped (optional)")
+                elif field == 'pagetype':
+                    st.write("⚪ Page Type: Will use 'None' as default")
     
     # Confirm mapping button
+    st.markdown('<div class="confirmation-button">', unsafe_allow_html=True)
     if st.button("Confirm Column Mapping", type="primary"):
-        if all(v for k, v in mapping.items() if required_fields[k][1]):
+        if all(v for k, v in mapping.items() if k != 'pagetype'):  # Check all required fields except pagetype
             try:
                 # Create new DataFrame with mapped columns
                 mapped_df = pd.DataFrame()
@@ -352,11 +374,11 @@ def display_column_mapper(df):
                 mapped_df['title'] = df[mapping['title']]
                 mapped_df['meta_description'] = df[mapping['meta_description']]
                 
-                # Add pagetype if mapped, otherwise use default
-                if mapping['pagetype']:
+                # Handle pagetype
+                if mapping['pagetype'] and mapping['pagetype'] != 'None':
                     mapped_df['pagetype'] = df[mapping['pagetype']]
                 else:
-                    mapped_df['pagetype'] = 'None'
+                    mapped_df['pagetype'] = 'None'  # Use 'None' as the default value
                 
                 # Final check for required columns
                 required_columns = {'url', 'title', 'meta_description', 'pagetype'}
@@ -372,9 +394,10 @@ def display_column_mapper(df):
                 return None
         else:
             st.error("Please map all required columns before proceeding.")
-            return None
-            
+            return None        
     return None
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def generate_summary_report(df, title_results, meta_results):
     """Generate a comprehensive summary report of the analysis."""
@@ -673,12 +696,118 @@ def display_export_options(df, title_results, meta_results, analysis_type):
                 unsafe_allow_html=True
             )
 
+def display_content_reference(df, content_type):
+    """Display a reference table of all titles or meta descriptions."""
+    if content_type == "Title":
+        content_col = "title"
+    else:
+        content_col = "meta_description"
+
+    # Create summary of all content
+    content_summary = df.groupby(content_col, dropna=False).agg({
+        'url': list,
+        'pagetype': lambda x: sorted(set(x))
+    }).reset_index()
+    
+    # Add counts and format
+    content_summary['Count'] = content_summary['url'].apply(len)
+    content_summary['URLs'] = content_summary['url'].apply(lambda x: '\n'.join(sorted(x)))
+    content_summary['Page Types'] = content_summary['pagetype'].apply(lambda x: ', '.join(x))
+    
+    # Clean up and sort
+    content_summary = content_summary[[content_col, 'Count', 'Page Types', 'URLs']]
+    content_summary = content_summary.sort_values('Count', ascending=False)
+    content_summary[content_col] = content_summary[content_col].fillna("[BLANK]")
+    
+    st.subheader(f"All {content_type}s Reference")
+    st.dataframe(content_summary, use_container_width=True)
+    st.markdown(
+        get_csv_download_link(
+            content_summary,
+            f"{content_type.lower()}_reference.csv"
+        ),
+        unsafe_allow_html=True
+    )
+
+def display_duplicate_analysis(title_results, meta_results, analysis_type, df):
+    """Display duplicate analysis results with proper empty states and reference tables."""
+    if "Titles" in analysis_type:
+        st.subheader("Title Duplicate Analysis")
+        if title_results and title_results[4] is not None and not title_results[4].empty:
+            st.dataframe(title_results[4], use_container_width=True)
+            st.markdown(
+                get_csv_download_link(
+                    title_results[4],
+                    "title_duplicate_rollup.csv"
+                ),
+                unsafe_allow_html=True
+            )
+        else:
+            display_empty_state("Duplicate Titles")
+        
+        st.subheader("Title Duplication by Page Type")
+        if title_results and title_results[1] is not None and not title_results[1].empty:
+            st.dataframe(title_results[1], use_container_width=True)
+        else:
+            display_empty_state("Title Duplication Data")
+            
+        # Add reference table for all titles
+        st.markdown("---")
+        display_content_reference(df, "Title")
+
+    if "Meta Descriptions" in analysis_type:
+        st.subheader("Meta Description Duplicate Analysis")
+        if meta_results and meta_results[4] is not None and not meta_results[4].empty:
+            st.dataframe(meta_results[4], use_container_width=True)
+            st.markdown(
+                get_csv_download_link(
+                    meta_results[4],
+                    "meta_description_duplicate_rollup.csv"
+                ),
+                unsafe_allow_html=True
+            )
+        else:
+            display_empty_state("Duplicate Meta Descriptions")
+        
+        st.subheader("Meta Description Duplication by Page Type")
+        if meta_results and meta_results[1] is not None and not meta_results[1].empty:
+            st.dataframe(meta_results[1], use_container_width=True)
+        else:
+            display_empty_state("Meta Description Duplication Data")
+            
+        # Add reference table for all meta descriptions
+        st.markdown("---")
+        display_content_reference(df, "Meta Description")
+
+def display_empty_state(content_type):
+    """Display a friendly empty state message with an icon."""
+    st.markdown(f"""
+        <div style="text-align: center; padding: 2rem; background: rgba(0,0,0,0.1); border-radius: 10px; margin: 1rem 0;">
+            <div style="font-size: 2rem; margin-bottom: 1rem;">🔍</div>
+            <h3 style="margin-bottom: 0.5rem;">No {content_type} Found</h3>
+            <p style="color: #666;">No duplicate {content_type.lower()} were detected in your content.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
 def main():
-    st.title("SEO Content Analysis Tool")
-    st.write("""
-    This tool analyzes SEO content (titles and meta descriptions) across different page types,
-    identifying patterns, duplicates, and n-gram frequencies.
-    """)
+    # Create a container for the header area
+    header_container = st.container()
+    with header_container:
+        col1, col2 = st.columns([1, 11])
+        with col1:
+            # Add reset button in top left
+            if st.button("🔄 Reset", help="Clear all data and start over"):
+                # Reset all session state variables
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+                st.rerun()
+        
+        with col2:
+            st.title("SEO Content Analysis Tool")
+            st.write("""
+            This tool analyzes SEO content (titles and meta descriptions) across different page types,
+            identifying patterns, duplicates, and n-gram frequencies.
+            """)
 
     # File upload
     uploaded_file = st.file_uploader(
@@ -708,17 +837,10 @@ def main():
                     st.success("Column mapping confirmed! You can now proceed with the analysis.")
                     st.session_state.analysis_complete = False
                     st.session_state.results = {}
-                    # Remove the return statement here to allow the code to continue
             
             # Only proceed with analysis if mapping is complete
             if st.session_state.mapping_complete and st.session_state.mapped_df is not None:
                 df = st.session_state.mapped_df  # Use the mapped DataFrame
-
-                # Verify required columns exist
-                required_columns = {'url', 'title', 'meta_description', 'pagetype'}
-                if not all(col in df.columns for col in required_columns):
-                    st.error("Missing required columns. Please check your column mapping.")
-                    return
 
                 # Display basic file info
                 st.subheader("File Overview")
@@ -754,12 +876,11 @@ def main():
                         help="Choose which n-gram sizes to analyze"
                     )
 
-                # Add custom styling for the button
+                # In the main app where we define button styles:
                 st.markdown("""
                     <style>
+                    /* Default button reset - remove any global styling */
                     div.stButton > button:first-child {
-                        background-color: #FF4B4B;
-                        color: white;
                         height: 3em;
                         width: 100%;
                         font-size: 20px;
@@ -768,15 +889,31 @@ def main():
                         border-radius: 4px;
                         margin: 1em 0;
                     }
-                    div.stButton > button:hover {
+                    
+                    /* Specific styling for the confirmation/mapping button (red) */
+                    div.stButton.confirmation-button > button:first-child {
+                        background-color: #FF4B4B;
+                        color: white;
+                    }
+                    div.stButton.confirmation-button > button:hover {
                         background-color: #FF6B6B;
+                    }
+                    
+                    /* Specific styling for analysis button (blue) */
+                    div.stButton.analysis-button > button:first-child {
+                        background-color: #0096FF;
+                        color: white;
+                    }
+                    div.stButton.analysis-button > button:hover {
+                        background-color: #0078CC;
                     }
                     </style>
                 """, unsafe_allow_html=True)
 
-                # Create a centered container for the button
+                # Create a centered container for the analyze button
                 col1, col2, col3 = st.columns([1, 2, 1])
                 with col2:
+                    st.markdown('<div class="analysis-button">', unsafe_allow_html=True)
                     if st.button("🔍 Run Analysis"):
                         with st.spinner("Analyzing content..."):
                             title_results = None
@@ -817,6 +954,7 @@ def main():
                             }
                             st.session_state.analysis_complete = True
                             st.success("Analysis complete!")
+                    st.markdown('</div>', unsafe_allow_html=True)
 
                 # Display results if analysis is complete
                 if st.session_state.analysis_complete:
@@ -842,37 +980,13 @@ def main():
                         # Title Analysis Tab
                         if "Titles" in analysis_type:
                             with tabs[tab_index]:
-                                st.subheader("Title Duplicate Analysis")
-                                if title_results and title_results[4] is not None:
-                                    st.dataframe(title_results[4])
-                                    st.markdown(
-                                        get_csv_download_link(
-                                            title_results[4],
-                                            "title_duplicate_rollup.csv"
-                                        ),
-                                        unsafe_allow_html=True
-                                    )
-                                st.subheader("Title Duplication by Page Type")
-                                if title_results:
-                                    st.dataframe(title_results[1])
+                                display_duplicate_analysis(title_results, None, ["Titles"], df)
                             tab_index += 1
 
                         # Meta Description Analysis Tab
                         if "Meta Descriptions" in analysis_type:
                             with tabs[tab_index]:
-                                st.subheader("Meta Description Duplicate Analysis")
-                                if meta_results and meta_results[4] is not None:
-                                    st.dataframe(meta_results[4])
-                                    st.markdown(
-                                        get_csv_download_link(
-                                            meta_results[4],
-                                            "meta_description_duplicate_rollup.csv"
-                                        ),
-                                        unsafe_allow_html=True
-                                    )
-                                st.subheader("Meta Description Duplication by Page Type")
-                                if meta_results:
-                                    st.dataframe(meta_results[1])
+                                display_duplicate_analysis(None, meta_results, ["Meta Descriptions"], df)
                             tab_index += 1
 
                         # N-gram Analysis Tab
