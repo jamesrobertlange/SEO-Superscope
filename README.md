@@ -34,10 +34,14 @@ A powerful Streamlit-based web application for comprehensive SEO content analysi
 
 ### Planned Features
 - Automatic page type detection based on URL patterns and content analysis
+- Removal of duplicate column matching button. After clicking, it expands, but clicking it just removes the section. It's a QoL fix and not a code fix.
 - Advanced URL parsing and site section identification
 - Indexability analysis and technical SEO metrics
 - Custom export templates and reporting
 - Advanced pattern matching and content classification
+- Updates to logic for replacing 'unsafe' characters
+- Addition of Glossary to explain differences in duplication metrics 
+  - By pagetype is total duplication errors after the 1 unique (so if there's 3 total of the same title tag, 1 is custom and it would flag 2 as duplicates), whereas the summary includes all URLs that have a duplication issue (so that would be 3).
 - Integration with common SEO tools and APIs
 
 

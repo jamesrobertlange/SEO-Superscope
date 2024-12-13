@@ -436,7 +436,7 @@ Total titles: {len(df):,}
 Unique titles: {df['title'].nunique():,}
 
 Duplicate Title Metrics:
-• Total URLs with duplicate titles: {urls_with_duplicate_titles:,} ({(urls_with_duplicate_titles/len(df)*100):.1f}% of all URLs)
+• Total URLs with duplicate title issues: {urls_with_duplicate_titles:,} ({(urls_with_duplicate_titles/len(df)*100):.1f}% of all URLs)
 • Additional instances only: {extra_title_instances:,} ({(extra_title_instances/len(df)*100):.1f}% of all URLs)
 """
         if title_results[4] is not None and not title_results[4].empty:
@@ -462,7 +462,7 @@ Total meta descriptions: {len(df):,}
 Unique meta descriptions: {df['meta_description'].nunique():,}
 
 Duplicate Meta Description Metrics:
-• Total URLs with duplicate meta descriptions: {urls_with_duplicate_metas:,} ({(urls_with_duplicate_metas/len(df)*100):.1f}% of all URLs)
+• Total URLs with duplicate meta description issues: {urls_with_duplicate_metas:,} ({(urls_with_duplicate_metas/len(df)*100):.1f}% of all URLs)
 • Additional instances only: {extra_meta_instances:,} ({(extra_meta_instances/len(df)*100):.1f}% of all URLs)
 """
         if meta_results[4] is not None and not meta_results[4].empty:
@@ -512,7 +512,7 @@ Title Duplication:
             
             summary_text += f"""
 Meta Description Duplication:
-• URLs with duplicate meta descriptions: {total_meta_dupes:,} ({dupe_rate:.1f}% of page type)
+• URLs with duplicate meta descriptions issues: {total_meta_dupes:,} ({dupe_rate:.1f}% of page type)
 • Additional instances only: {extra_meta_dupes:,} ({extra_rate:.1f}% of page type)"""
 
     return summary_text
@@ -582,7 +582,7 @@ def display_summary_report(df, title_results, meta_results):
             st.metric("Unique Titles", f"{df['title'].nunique():,}")
         with col3:
             dupes = len(df[df.duplicated(subset=['title'], keep=False)])
-            st.metric("Duplicate Titles", f"{dupes:,}")
+            st.metric("Total URLs with Duplicate Title Issues", f"{dupes:,}")
         
         if title_results[4] is not None and not title_results[4].empty:
             st.markdown("#### Most Duplicated Title")
@@ -604,7 +604,7 @@ def display_summary_report(df, title_results, meta_results):
             st.metric("Unique Meta Descriptions", f"{df['meta_description'].nunique():,}")
         with col3:
             dupes = len(df[df.duplicated(subset=['meta_description'], keep=False)])
-            st.metric("Duplicate Meta Descriptions", f"{dupes:,}")
+            st.metric("Total URLs with Duplicate Meta Descriptions Issues", f"{dupes:,}")
         
         if meta_results[4] is not None and not meta_results[4].empty:
             st.markdown("#### Most Duplicated Meta Description")
@@ -632,7 +632,7 @@ def display_summary_report(df, title_results, meta_results):
                         ])
                         dupe_rate = (title_dupes/len(pagetype_data)*100) if title_dupes > 0 else 0
                         st.metric(
-                            "Duplicate Titles",
+                            "Total URLs with Duplicate Title Issues",
                             f"{title_dupes:,}",
                             f"{dupe_rate:.1f}% of pages"
                         )
@@ -644,7 +644,7 @@ def display_summary_report(df, title_results, meta_results):
                         ])
                         dupe_rate = (meta_dupes/len(pagetype_data)*100) if meta_dupes > 0 else 0
                         st.metric(
-                            "Duplicate Meta Descriptions",
+                            "Total URLs with Duplicate Meta Description Issues",
                             f"{meta_dupes:,}",
                             f"{dupe_rate:.1f}% of pages"
                         )
@@ -778,7 +778,7 @@ def display_duplicate_analysis(title_results, meta_results, analysis_type, df):
                 unsafe_allow_html=True
             )
         else:
-            display_empty_state("Duplicate Titles")
+            display_empty_state("Total URLs with Duplicate Titles")
         
         st.subheader("Title Duplication by Page Type")
         if title_results and title_results[1] is not None and not title_results[1].empty:
@@ -802,7 +802,7 @@ def display_duplicate_analysis(title_results, meta_results, analysis_type, df):
                 unsafe_allow_html=True
             )
         else:
-            display_empty_state("Duplicate Meta Descriptions")
+            display_empty_state("Pages with Duplicate Meta Descriptions")
         
         st.subheader("Meta Description Duplication by Page Type")
         if meta_results and meta_results[1] is not None and not meta_results[1].empty:
