@@ -927,14 +927,11 @@ def inspect_csv_content(uploaded_file):
         return False
 
 def main():
-    # Create a container for the header area
     header_container = st.container()
     with header_container:
         col1, col2 = st.columns([1, 11])
         with col1:
-            # Add reset button in top left
             if st.button("🔄 Reset", help="Clear all data and start over"):
-                # Reset all session state variables
                 for key in list(st.session_state.keys()):
                     del st.session_state[key]
                 st.rerun()
@@ -942,11 +939,16 @@ def main():
         with col2:
             st.title("SEO Content SuperScope")
             st.write("""
-            This tool analyzes SEO content (titles and meta descriptions) across different page types,
-            identifying patterns, duplicates, and n-gram frequencies from common CSV data sources (such as Screaming Frog and Sitebulb).
-                     
+            Analyze SEO content elements (titles, meta descriptions) to identify patterns, duplicates, and n-gram frequencies from CSV exports (Screaming Frog, Sitebulb).
+            
             Created by [Jimmy Lange](https://jamesrobertlange.com).
+            
+            Watch below for a quick overview of the tool's features and capabilities:
             """)
+            
+            vid_col1, vid_col2, vid_col3 = st.columns([1,2,1])
+            with vid_col2:
+                st.video('https://www.youtube.com/watch?v=xlUXNWry-Ig')
 
     # File upload
     uploaded_file = st.file_uploader(
